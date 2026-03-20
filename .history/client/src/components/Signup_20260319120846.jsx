@@ -1,0 +1,52 @@
+import { useState } from "react";
+import axios from "axios";
+
+const Signup = ({ setUser, setShowSignup }) => {
+  const [form, setForm] = useState({ username: "", password: "" });
+
+  const handleSignup = async () => {
+    await axios.post("http://localhost:5000/api/auth/signup", form);
+
+    setShowSignup(false);
+  };
+
+  return (
+    <div className="h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-6 rounded shadow w-80">
+        <h2 className="text-xl mb-4">Signup</h2>
+
+        <input
+          placeholder="Username"
+          className="border p-2 w-full mb-2"
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+        />
+
+        <input
+          type="password"
+          placeholder="Password"
+          className="border p-2 w-full mb-2"
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+        />
+
+        <button
+          className="bg-green-500 text-white w-full p-2"
+          onClick={handleSignup}
+        >
+          Signup
+        </button>
+
+        <p className="mt-2 text-sm">
+          Already have account?{" "}
+          <span
+            className="text-blue-500 cursor-pointer"
+            onClick={() => setShowSignup(false)}
+          >
+            Login
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default Signup;
