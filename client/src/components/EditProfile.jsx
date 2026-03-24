@@ -1,20 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 
 const EditProfile = ({ user, setUser, onClose }) => {
   const [username, setUsername] = useState(user.username);
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(user.avatar || "");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(user.avatar || "");
+      return undefined;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file, user.avatar]);
 
   const handleUpdate = async () => {
     if (!username.trim()) {
       toast.error("Username cannot be empty");
       return;
     }
-
     setLoading(true);
-
     try {
       const formData = new FormData();
       formData.append("username", username);
@@ -36,79 +49,71 @@ const EditProfile = ({ user, setUser, onClose }) => {
       const updatedUser = res.data?.user || (res.data?._id ? res.data : null);
       const finalUser = updatedUser
         ? { ...user, ...updatedUser }
-        : { ...user, username, ...(res.data?.avatar && { avatar: res.data.avatar }) };
+        : { ...user, username };
 
       setUser(finalUser);
       localStorage.setItem("user", JSON.stringify(finalUser));
-
-      if (res.data?.token) {
-        localStorage.setItem("token", res.data.token);
-      }
 
       toast.success("Profile updated successfully!");
       onClose();
     } catch (error) {
       console.error("Profile update failed:", error);
-      toast.error("Failed to update profile.");
+      toast.error(error.response?.data?.message || "Failed to update profile.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4 backdrop-blur-sm">
-      <div className="glass-panel floating-card w-full max-w-md rounded-[30px] p-6 sm:p-7">
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#2f8f83]">
-            Profile
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold">Edit your profile</h2>
-          <p className="mt-2 text-sm leading-6" style={{ color: "var(--text-soft)" }}>
-            Update your display name or upload a new avatar to personalize the chat.
-          </p>
+    <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+      <div className="w-80 rounded-2xl bg-white p-6 shadow-lg">
+        <h2 className="text-xl font-bold mb-4">Edit Profile</h2>
+
+        <div className="mb-4 flex flex-col items-center">
+          <img
+            src={
+              previewUrl ||
+              `https://api.dicebear.com/7.x/initials/svg?seed=${
+                user?.displayName || user?.username || "default"
+              }`
+            }
+            alt="Profile preview"
+            className="mb-3 h-24 w-24 rounded-full object-cover ring-4 ring-sky-100"
+          />
+          <p className="text-sm text-gray-500">Profile picture preview</p>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Username
-            </label>
-            <input
-              className="auth-input"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={loading}
-            />
-          </div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+        <input
+          className="border border-gray-300 p-2 w-full rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          disabled={loading}
+        />
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Profile picture
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              className="auth-input file:mr-4 file:rounded-xl file:border-0 file:bg-[#17313e] file:px-4 file:py-2 file:text-sm file:font-medium file:text-white"
-              onChange={(e) => setFile(e.target.files[0])}
-              disabled={loading}
-            />
-          </div>
-        </div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Profile Picture</label>
+        <input
+          type="file"
+          accept="image/*"
+          className="border border-gray-300 p-2 w-full rounded mb-4 focus:outline-none"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          disabled={loading}
+        />
 
-        <div className="mt-6 flex gap-3">
+        <div className="flex gap-2 mt-4">
           <button
-            className="secondary-button flex-1"
+            className="bg-gray-400 text-white flex-1 py-2 rounded hover:bg-gray-500 transition-colors"
             onClick={onClose}
             disabled={loading}
           >
             Cancel
           </button>
           <button
-            className="primary-button flex-1 disabled:cursor-not-allowed disabled:opacity-60"
+            className="bg-blue-500 text-white flex-1 py-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
             onClick={handleUpdate}
             disabled={loading}
           >
-            {loading ? "Saving..." : "Save changes"}
+            {loading ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
