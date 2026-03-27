@@ -1,20 +1,14 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import toast from "react-hot-toast";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { api } from "../lib/api";
+import { getAvatarUrl } from "../lib/avatar";
+import { persistSession } from "../lib/storage";
 
 const EditProfile = ({ user, setUser, onClose }) => {
   const [username, setUsername] = useState(user.username);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(user.avatar || "");
   const [loading, setLoading] = useState(false);
-
-  const getAvatarUrl = (avatar) => {
-    if (!avatar) return "";
-    if (avatar.startsWith("http") || avatar.startsWith("data:") || avatar.startsWith("blob:")) return avatar;
-    return `${API_BASE_URL}${avatar.startsWith("/") ? "" : "/"}${avatar}`;
-  };
 
   useEffect(() => {
     if (!file) {
@@ -41,17 +35,7 @@ const EditProfile = ({ user, setUser, onClose }) => {
       formData.append("username", username);
       if (file) formData.append("avatar", file);
 
-      const token = localStorage.getItem("token");
-
-      const res = await axios.put(
-        `${API_BASE_URL}/api/users/profile`,
-        formData,
-        {
-          headers: {
-            Authorization: token,
-          },
-        }
-      );
+      const res = await api.put("/users/profile", formData);
 
       const updatedUser = res.data?.user || (res.data?._id ? res.data : null);
       const finalUser = updatedUser
@@ -59,12 +43,11 @@ const EditProfile = ({ user, setUser, onClose }) => {
         : { ...user, username };
 
       setUser(finalUser);
-      localStorage.setItem("user", JSON.stringify(finalUser));
+      persistSession({ user: finalUser });
 
       toast.success("Profile updated successfully!");
       onClose();
     } catch (error) {
-      console.error("Profile update failed:", error);
       toast.error(error.response?.data?.message || "Failed to update profile.");
     } finally {
       setLoading(false);

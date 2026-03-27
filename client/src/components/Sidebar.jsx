@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { getAvatarUrl } from "../lib/avatar";
 
 const Sidebar = ({
   users,
@@ -13,8 +12,6 @@ const Sidebar = ({
   isOpen,
   onClose,
 }) => {
-  if (!user) return null;
-
   const notificationMap = useMemo(() => {
     const map = {};
     notifications?.forEach((n) => {
@@ -23,11 +20,7 @@ const Sidebar = ({
     return map;
   }, [notifications]);
 
-  const getAvatarUrl = (avatar) => {
-    if (!avatar) return "";
-    if (avatar.startsWith("http") || avatar.startsWith("data:") || avatar.startsWith("blob:")) return avatar;
-    return `${API_BASE_URL}${avatar.startsWith("/") ? "" : "/"}${avatar}`;
-  };
+  if (!user) return null;
 
   return (
     <aside
@@ -80,6 +73,7 @@ const Sidebar = ({
             if (!u) return null;
 
             const isActive = selectedId === u._id;
+            const avatarUrl = getAvatarUrl(u.avatar);
 
             return (
               <button
@@ -95,8 +89,8 @@ const Sidebar = ({
                 <div className="relative shrink-0">
                   <img
                     src={
-                      u?.avatar
-                        ? getAvatarUrl(u.avatar)
+                      avatarUrl
+                        ? avatarUrl
                         : `https://api.dicebear.com/7.x/initials/svg?seed=${
                             u?.displayName || u?.username || "default"
                           }`

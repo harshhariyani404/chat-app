@@ -5,11 +5,11 @@ import { getUsers, updateProfile, getUserStatus, getChatUsers, searchUsers } fro
 
 const router = express.Router();
 
-router.get("/", getUsers);
-router.get("/search", searchUsers);
+router.get("/", auth, getUsers);
+router.get("/search", auth, searchUsers);
 router.put("/profile", auth, upload.single("avatar"), updateProfile);
-router.get("/status/:userId", getUserStatus);
-router.get("/chat-list/:myId", getChatUsers);
+router.get("/status/:userId", auth, getUserStatus);
+router.get("/chat-list/:myId", auth, getChatUsers);
 
 
 export default router;

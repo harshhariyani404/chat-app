@@ -55,16 +55,18 @@ export const updateProfile = async (req, res) => {
       });
 
       avatarData = {
-        avatar: result.secure_url,
-        avatarPublicId: result.public_id,
+        avatar: {
+          url: result.secure_url,
+          publicId: result.public_id,
+        }
       };
 
       if (req.file?.path && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
 
-      if (existingUser.avatarPublicId) {
-        await cloudinary.uploader.destroy(existingUser.avatarPublicId);
+      if (existingUser.avatar && existingUser.avatar.publicId) {
+        await cloudinary.uploader.destroy(existingUser.avatar.publicId);
       }
     }
 

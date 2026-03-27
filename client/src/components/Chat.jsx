@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import toast from "react-hot-toast";
 import { socket } from "../socket";
 import Message from "./Message";
 import EmojiPicker from "emoji-picker-react";
+import { api } from "../lib/api";
+import { getAvatarUrl } from "../lib/avatar";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const imageMimePrefix = "image/";
 const videoMimePrefix = "video/";
 const fileTypeOptions = [
@@ -65,12 +65,6 @@ const formatDateLabel = (date) => {
   return msgDate.toLocaleDateString()
 }
 
-const getAvatarUrl = (avatar) => {
-  if (!avatar) return "";
-  if (avatar.startsWith("http") || avatar.startsWith("data:") || avatar.startsWith("blob:")) return avatar;
-  return `${API_BASE_URL}${avatar.startsWith("/") ? "" : "/"}${avatar}`;
-};
-
 const Chat = ({
   user,
   selected,
@@ -112,10 +106,8 @@ const Chat = ({
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const activeCallPeerIdRef = useRef(null);
-  const pendingIceCandidatesRef = useRef([]); // 1. Queue for early ICE candidates
+  const pendingIceCandidatesRef = useRef([]);
   const isEndingCallRef = useRef(false);
-
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     const chatContainer = chatRef.current;
@@ -148,13 +140,10 @@ const Chat = ({
 
     const fetchMessages = async () => {
       try {
-        const res = await axios.get(
-          `${API_BASE_URL}/api/messages/${selected._id}`,
-          { headers: { Authorization: token } }
-        );
+        const res = await api.get(`/messages/${selected._id}`);
         setMessages(res.data);
-      } catch (err) {
-        console.log("Error loading messages:", err);
+      } catch {
+        toast.error("Unable to load messages for this chat.");
       }
     };
 
@@ -181,7 +170,7 @@ const Chat = ({
     socket.on("receive_message", handleReceiveMessage);
 
     return () => socket.off("receive_message", handleReceiveMessage);
-  }, [selected, user._id, token]);
+  }, [selected, user._id]);
 
   useEffect(() => {
     const handleStatusUpdate = ({ messageId, status }) => {
@@ -195,7 +184,7 @@ const Chat = ({
     socket.on("message_status_update", handleStatusUpdate);
 
     return () => socket.off("message_status_update", handleStatusUpdate);
-  }, []);
+  }, [user._id]);
 
   useEffect(() => {
     const unseenMessages = messages.filter((msg) => {
@@ -372,24 +361,22 @@ const Chat = ({
           const candidate = pendingIceCandidatesRef.current.shift();
           await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
         }
-      } catch (err) {
-        console.error("Error setting remote description:", err);
+      } catch {
+        cleanupCall(true, "Unable to connect the call");
       }
     };
 
     const handleIceCandidate = async ({ candidate }) => {
-      console.log("Received remote ICE candidate:", candidate?.candidate);
       if (candidate) {
         const peer = peerRef.current;
-        // 2. Only add candidates if the remote description is ready
+
         if (peer && peer.remoteDescription && peer.remoteDescription.type) {
           try {
             await peer.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (e) {
-            console.error("Error adding ICE candidate:", e);
+          } catch {
+            pendingIceCandidatesRef.current.push(candidate);
           }
         } else {
-          // Otherwise, queue them up to be processed later
           pendingIceCandidatesRef.current.push(candidate);
         }
       }
@@ -427,7 +414,7 @@ const Chat = ({
         });
       }
     };
-  }, []);
+  }, [user._id]);
 
   const addUserToSidebar = () => {
     setUsers((prev) => {
@@ -498,15 +485,7 @@ const Chat = ({
         formData.append("message", text.trim());
       }
 
-      await axios.post(
-        `${API_BASE_URL}/api/messages/${selected._id}/files`,
-        formData,
-        {
-          headers: {
-            Authorization: token,
-          },
-        }
-      );
+      await api.post(`/messages/${selected._id}/files`, formData);
 
       addUserToSidebar();
       setText("");
@@ -516,7 +495,6 @@ const Chat = ({
         fileInputRef.current.value = "";
       }
     } catch (err) {
-      console.log("Error uploading files:", err);
       toast.error(err.response?.data?.message || "Failed to upload files");
     } finally {
       setIsUploadingFiles(false);
@@ -527,7 +505,7 @@ const Chat = ({
     if (!newName.trim()) return;
 
     try {
-      await axios.post(`${API_BASE_URL}/api/contacts/nickname`, {
+      await api.post("/contacts/nickname", {
         userId: user._id,
         contactUserId: selected._id,
         nickname: newName,
@@ -554,8 +532,7 @@ const Chat = ({
       setShowInfoMenu(false);
       setNewName("");
     } catch (err) {
-      console.log("Error updating nickname", err);
-      toast.error("Failed to update nickname");
+      toast.error(err.response?.data?.message || "Failed to update nickname");
     }
   };
 
@@ -588,8 +565,10 @@ const Chat = ({
     // Defer hardware cleanup so the UI renders the idle state without freezing
     setTimeout(() => {
       try {
-        peerRef.current?.getSenders().forEach(s => s.track?.stop());
-      } catch { }
+        peerRef.current?.getSenders().forEach((sender) => sender.track?.stop());
+      } catch {
+        return;
+      }
 
       if (peerRef.current) {
         peerRef.current.ontrack = null;
@@ -649,12 +628,10 @@ const Chat = ({
     activeCallPeerIdRef.current = peerId;
 
     stream.getTracks().forEach((track) => {
-      console.log("Adding local track:", track.kind);
       peer.addTrack(track, stream);
     });
 
     peer.ontrack = (event) => {
-      console.log("Received remote track:", event.track.kind);
       const [remoteStream] = event.streams;
 
       if (!remoteStreamRef.current) {
@@ -668,7 +645,6 @@ const Chat = ({
 
     peer.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("Emitting local ICE candidate:", event.candidate.candidate);
         socket.emit("ice-candidate", {
           to: peerId,
           candidate: event.candidate,
@@ -686,15 +662,6 @@ const Chat = ({
       ) {
         cleanupCall(true, "Call ended");
       }
-    };
-
-    // 3. Debug ICE Connection State
-    peer.oniceconnectionstatechange = () => {
-      console.log("ICE Connection State:", peer.iceConnectionState);
-    };
-
-    peer.onsignalingstatechange = () => {
-      console.log("Signaling State:", peer.signalingState);
     };
 
     return peer;
@@ -746,8 +713,7 @@ const Chat = ({
         offer,
         callType: type,
       });
-    } catch (error) {
-      console.log("Error starting call:", error);
+    } catch {
       cleanupCall(true, "Unable to start call");
       toast.error("Unable to start call");
     }
@@ -767,13 +733,12 @@ const Chat = ({
 
       await peer.setRemoteDescription(incomingCall.offer);
 
-      // Process any ICE candidates that arrived before we answered
       while (pendingIceCandidatesRef.current.length > 0) {
         const candidate = pendingIceCandidatesRef.current.shift();
         try {
           await peer.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error("Error adding queued ICE candidate:", err);
+        } catch {
+          pendingIceCandidatesRef.current.push(candidate);
         }
       }
 
@@ -787,8 +752,7 @@ const Chat = ({
 
       setIncomingCall(null);
       setCallState("active");
-    } catch (error) {
-      console.log("Error accepting call:", error);
+    } catch {
       cleanupCall(true, "Unable to join call");
       toast.error("Unable to join call");
     }
@@ -850,6 +814,7 @@ const Chat = ({
       ? incomingCall.username || incomingCall.displayName || incomingCall.fromName || "Incoming caller"
       : selected?.displayName || selected?.username || "?");
   const activeCallInitial = activeCallName.slice(0, 1).toUpperCase();
+  const selectedAvatarUrl = getAvatarUrl(selected?.avatar);
 
   return (
     <section className="relative flex min-w-0 flex-1 flex-col bg-transparent">
@@ -1059,8 +1024,8 @@ const Chat = ({
           <div className="flex items-start gap-4">
             <img
               src={
-                selected?.avatar
-                  ? getAvatarUrl(selected.avatar)
+                selectedAvatarUrl
+                  ? selectedAvatarUrl
                   : `https://api.dicebear.com/7.x/initials/svg?seed=${selected?.displayName || selected?.username || "default"
                   }`
               }
@@ -1130,8 +1095,8 @@ const Chat = ({
                   <div className="flex items-center gap-3">
                     <img
                       src={
-                        selected?.avatar
-                          ? getAvatarUrl(selected.avatar)
+                        selectedAvatarUrl
+                          ? selectedAvatarUrl
                           : `https://api.dicebear.com/7.x/initials/svg?seed=${selected?.displayName || selected?.username || "default"
                           }`
                       }

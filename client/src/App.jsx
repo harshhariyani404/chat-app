@@ -3,17 +3,10 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import { Toaster } from "react-hot-toast";
+import { getStoredUser } from "./lib/storage";
 
 const App = () => {
-  const [user, setUser] = useState(() => {
-    
-    try {
-      const storedUser = localStorage.getItem("user");
-      return storedUser ? JSON.parse(storedUser) : null;
-    } catch (error) {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(() => getStoredUser());
   const [showSignup, setShowSignup] = useState(false);
 
   return (

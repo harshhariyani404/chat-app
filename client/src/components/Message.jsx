@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
-import { socket } from "../socket";
+import toast from "react-hot-toast";
+import { api } from "../lib/api";
 
 const imageFormats = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
 const videoFormats = ["mp4", "mov", "webm", "m4v"];
@@ -21,12 +21,9 @@ const getAttachmentKind = (attachment) => {
   return "file";
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
 const Message = ({ msg, myId }) => {
   const messageFrom = msg.from?._id || msg.from;
   const isMe = messageFrom === myId;
-  const token = localStorage.getItem("token");
 
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(msg.message || "");
@@ -34,10 +31,6 @@ const Message = ({ msg, myId }) => {
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const menuRef = useRef(null);
-
-  useEffect(() => {
-    setText(msg.message || "");
-  }, [msg.message]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -138,36 +131,28 @@ const Message = ({ msg, myId }) => {
 
   const handleEdit = async () => {
     try {
-      await axios.put(
-        `${API_BASE_URL}/api/messages/${msg._id}`,
-        { newText: text },
-        { headers: { Authorization: token } }
-      );
+      await api.put(`/messages/${msg._id}`, { newText: text });
       setEditing(false);
     } catch (error) {
-      console.log("Error editing message:", error);
+      toast.error(error.response?.data?.message || "Unable to edit message.");
     }
   };
 
   const handleDeleteForMe = async () => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/messages/${msg._id}/for-me`, {
-        headers: { Authorization: token },
-      });
+      await api.delete(`/messages/${msg._id}/for-me`);
       setShowMenu(false);
     } catch (error) {
-      console.log("Error deleting message for me:", error);
+      toast.error(error.response?.data?.message || "Unable to delete the message.");
     }
   };
 
   const handleDeleteForEveryone = async () => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/messages/${msg._id}`, {
-        headers: { Authorization: token },
-      });
+      await api.delete(`/messages/${msg._id}`);
       setShowMenu(false);
     } catch (error) {
-      console.log("Error deleting message for everyone:", error);
+      toast.error(error.response?.data?.message || "Unable to delete the message.");
     }
   };
 
@@ -200,6 +185,7 @@ const Message = ({ msg, myId }) => {
                   <button
                     className="block min-h-[44px] w-full rounded-xl px-3 py-2 text-left transition hover:bg-slate-50"
                     onClick={() => {
+                      setText(msg.message || "");
                       setEditing(true);
                       setShowMenu(false);
                     }}

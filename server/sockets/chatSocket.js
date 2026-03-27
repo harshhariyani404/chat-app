@@ -16,22 +16,22 @@ const getNotificationText = (message, attachments = []) => {
 
 const chatSocket = (io) => {
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
-
     socket.on("register", async (userId) => {
       try {
+        if (!userId) return;
+
         socket.userId = userId;
         onlineUsers[userId] = socket.id;
         socket.join(`user:${userId}`);
 
         await User.findByIdAndUpdate(userId, {
           isOnline: true,
+          lastSeen: null,
         });
 
         socket.broadcast.emit("user_online", userId);
-        console.log("Online users:", onlineUsers);
-      } catch (err) {
-        console.log("Register error:", err);
+      } catch {
+        delete onlineUsers[userId];
       }
     });
 
@@ -52,9 +52,9 @@ const chatSocket = (io) => {
     });
 
     socket.on("send_message", async (data) => {
-      try {
-        const { from, to, message, attachments = [] } = data;
+      const { from, to, message, attachments = [] } = data;
 
+      try {
         const savedMessage = await Message.create({
           from,
           to,
@@ -63,7 +63,6 @@ const chatSocket = (io) => {
           status: "sent",
         });
 
-        // ✅ if receiver is online → mark delivered
         if (onlineUsers[to]) {
           await Message.findByIdAndUpdate(savedMessage._id, {
             status: "delivered",
@@ -86,14 +85,14 @@ const chatSocket = (io) => {
         });
 
         io.to(`user:${from}`).emit("receive_message", savedMessage);
-      } catch (err) {
-        console.log("Error sending message:", err);
+      } catch {
+        io.to(`user:${from}`).emit("message_error", {
+          message: "Unable to send message",
+        });
       }
     });
 
     socket.on("disconnect", async () => {
-      console.log("User disconnected:", socket.id);
-
       try {
         for (const userId in onlineUsers) {
           if (onlineUsers[userId] === socket.id) {
@@ -113,19 +112,16 @@ const chatSocket = (io) => {
             break;
           }
         }
-
-        console.log("Updated users:", onlineUsers);
-      } catch (err) {
-        console.log("Disconnect error:", err);
+      } catch {
+        return;
       }
     });
+
     socket.on("message_seen", async ({ messageId }) => {
       try {
         const msg = await Message.findById(messageId);
 
         if (!msg) return;
-
-        // only receiver can mark seen
         if (msg.to.toString() !== socket.userId) return;
 
         const updated = await Message.findByIdAndUpdate(
@@ -141,12 +137,10 @@ const chatSocket = (io) => {
           messageId,
           status: "seen",
         });
-
-      } catch (err) {
-        console.log("Seen error:", err);
+      } catch {
+        return;
       }
     });
-    //call
 
     socket.on("call-user", ({ to, offer, from, callType }) => {
       const receiverSocket = onlineUsers[to];
@@ -155,7 +149,7 @@ const chatSocket = (io) => {
         io.to(receiverSocket).emit("incoming-call", {
           from,
           offer,
-          callType, // "audio" or "video"
+          callType,
         });
       }
     });
@@ -170,7 +164,6 @@ const chatSocket = (io) => {
       }
     });
 
-
     socket.on("ice-candidate", ({ to, candidate }) => {
       const targetSocket = onlineUsers[to];
 
@@ -181,11 +174,19 @@ const chatSocket = (io) => {
       }
     });
 
-    socket.on("end-call", ({ to }) => {
+    socket.on("call-ended", ({ to }) => {
       const targetSocket = onlineUsers[to];
 
       if (targetSocket) {
         io.to(targetSocket).emit("call-ended");
+      }
+    });
+
+    socket.on("call-declined", ({ to }) => {
+      const targetSocket = onlineUsers[to];
+
+      if (targetSocket) {
+        io.to(targetSocket).emit("call-declined");
       }
     });
   });

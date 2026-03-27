@@ -1,22 +1,19 @@
 import { useState } from "react";
 import EditProfile from "./EditProfile";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { getAvatarUrl } from "../lib/avatar";
+import { clearSession } from "../lib/storage";
+import { socket } from "../socket";
 
 const Navbar = ({ user, setUser, onMenuToggle }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const avatarUrl = getAvatarUrl(user?.avatar);
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    socket.removeAllListeners();
+    socket.disconnect();
+    clearSession();
     setUser(null);
-  };
-
-  const getAvatarUrl = (avatar) => {
-    if (!avatar) return "";
-    if (avatar.startsWith("http") || avatar.startsWith("data:") || avatar.startsWith("blob:")) return avatar;
-    return `${API_BASE_URL}${avatar.startsWith("/") ? "" : "/"}${avatar}`;
   };
 
   return (
@@ -42,16 +39,16 @@ const Navbar = ({ user, setUser, onMenuToggle }) => {
         <div className="relative shrink-0">
           <img
             src={
-              user?.avatar
-                ? getAvatarUrl(user.avatar)
-                : `https://api.dicebear.com/7.x/initials/svg?seed=${
-                    user?.displayName || user?.username || "default"
-                  }`
+              avatarUrl
+                ? avatarUrl
+                : `https://api.dicebear.com/7.x/initials/svg?seed=${user?.displayName || user?.username || "default"
+                }`
             }
+            className="h-12 w-12 rounded-2xl object-cover ring-1 ring-slate-200"
             alt="profile"
-            className="h-11 w-11 cursor-pointer rounded-full object-cover transition-all hover:ring-2 hover:ring-blue-400"
             onClick={() => setShowMenu((prev) => !prev)}
           />
+
 
           {showMenu && (
             <div className="absolute right-0 top-14 z-30 w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">

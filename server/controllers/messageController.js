@@ -3,6 +3,8 @@ import cloudinary from "../config/cloudinary.js";
 import Message from "../models/message.js";
 import User from "../models/user.js";
 import { onlineUsers } from "../sockets/onlineUsers.js";
+import { ApiError, handleControllerError } from "../utils/http.js";
+import { validateObjectId } from "../utils/validation.js";
 
 const getCloudinaryResourceType = (mimeType = "") => {
   if (mimeType.startsWith("image/")) {
@@ -21,6 +23,10 @@ export const getMessages = async (req, res) => {
     const myId = req.userId;
     const otherUserId = req.params.userId;
 
+    if (!validateObjectId(otherUserId)) {
+      throw new ApiError(400, "Invalid user id");
+    }
+
     const messages = await Message.find({
       $or: [
         { from: myId, to: otherUserId },
@@ -30,9 +36,8 @@ export const getMessages = async (req, res) => {
     }).sort({ createdAt: 1 });
 
     res.json(messages);
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ msg: "Error fetching messages" });
+  } catch (error) {
+    handleControllerError(res, error, "Error fetching messages");
   }
 };
 
@@ -51,8 +56,12 @@ export const uploadMessageFiles = async (req, res) => {
     const text = req.body.message?.trim() || "";
     const files = req.files || [];
 
+    if (!validateObjectId(to)) {
+      throw new ApiError(400, "Invalid recipient id");
+    }
+
     if (!text && files.length === 0) {
-      return res.status(400).json({ message: "Message text or files are required" });
+      throw new ApiError(400, "Message text or files are required");
     }
 
     const attachments = await Promise.all(
@@ -115,10 +124,9 @@ export const uploadMessageFiles = async (req, res) => {
     }
 
     res.status(201).json(savedMessage);
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
     cleanupFiles();
-    res.status(500).json({ msg: "Error uploading message files" });
+    handleControllerError(res, error, "Error uploading message files");
   }
 };
 
@@ -127,23 +135,31 @@ export const editMessage = async (req, res) => {
     const { messageId } = req.params;
     const { newText } = req.body;
 
+    if (!validateObjectId(messageId)) {
+      throw new ApiError(400, "Invalid message id");
+    }
+
     const message = await Message.findById(messageId);
 
     if (!message) {
-      return res.status(404).json({ msg: "Message not found" });
+      throw new ApiError(404, "Message not found");
     }
 
     if (message.from.toString() !== req.userId) {
-      return res.status(403).json({ msg: "Not allowed" });
+      throw new ApiError(403, "Not allowed");
     }
 
     if (message.isDeletedForEveryone) {
-      return res.status(400).json({ msg: "Deleted messages cannot be edited" });
+      throw new ApiError(400, "Deleted messages cannot be edited");
+    }
+
+    if (!newText?.trim()) {
+      throw new ApiError(400, "Message text cannot be empty");
     }
 
     const updated = await Message.findByIdAndUpdate(
       messageId,
-      { message: newText?.trim?.() || "", isEdited: true },
+      { message: newText.trim(), isEdited: true },
       { new: true }
     );
 
@@ -155,9 +171,8 @@ export const editMessage = async (req, res) => {
     }
 
     res.json(updated);
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ msg: "Error editing message" });
+  } catch (error) {
+    handleControllerError(res, error, "Error editing message");
   }
 };
 
@@ -166,18 +181,22 @@ export const deleteMessage = async (req, res) => {
     const { messageId } = req.params;
     const userId = req.userId;
 
+    if (!validateObjectId(messageId)) {
+      throw new ApiError(400, "Invalid message id");
+    }
+
     const message = await Message.findById(messageId);
 
     if (!message) {
-      return res.status(404).json({ msg: "Message not found" });
+      throw new ApiError(404, "Message not found");
     }
 
     if (message.from.toString() !== userId) {
-      return res.status(403).json({ msg: "Not allowed" });
+      throw new ApiError(403, "Not allowed");
     }
 
     if (message.isDeletedForEveryone) {
-      return res.status(400).json({ msg: "Message already deleted for everyone" });
+      throw new ApiError(400, "Message already deleted for everyone");
     }
 
     message.isDeletedForEveryone = true;
@@ -195,9 +214,8 @@ export const deleteMessage = async (req, res) => {
     }
 
     res.json({ msg: "Deleted for everyone", message });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ msg: "Error deleting message" });
+  } catch (error) {
+    handleControllerError(res, error, "Error deleting message");
   }
 };
 
@@ -206,17 +224,21 @@ export const deleteForMe = async (req, res) => {
     const { messageId } = req.params;
     const userId = req.userId;
 
+    if (!validateObjectId(messageId)) {
+      throw new ApiError(400, "Invalid message id");
+    }
+
     const message = await Message.findById(messageId);
 
     if (!message) {
-      return res.status(404).json({ msg: "Message not found" });
+      throw new ApiError(404, "Message not found");
     }
 
     const isParticipant =
       message.from.toString() === userId || message.to.toString() === userId;
 
     if (!isParticipant) {
-      return res.status(403).json({ msg: "Not allowed" });
+      throw new ApiError(403, "Not allowed");
     }
 
     if (!message.deletedFor.includes(userId)) {
@@ -235,8 +257,7 @@ export const deleteForMe = async (req, res) => {
     }
 
     res.json({ msg: "Deleted for me", messageId });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ msg: "Error deleting message for me" });
+  } catch (error) {
+    handleControllerError(res, error, "Error deleting message for me");
   }
 };

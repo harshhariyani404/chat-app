@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import Chat from "../components/Chat";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import { api } from "../lib/api";
 import { socket } from "../socket";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const Home = ({ user, setUser }) => {
   const [users, setUsers] = useState([]);
@@ -17,22 +15,18 @@ const Home = ({ user, setUser }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [incomingCallData, setIncomingCallData] = useState(null);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
-      const res = await axios.get(
-        `${API_BASE_URL}/api/users/chat-list/${user._id}`
-      );
+      const res = await api.get(`/users/chat-list/${user._id}`);
       setUsers(res.data);
-    } catch (error) {
-      console.error("Error fetching users:", error);
+    } catch {
+      toast.error("Unable to load chats right now.");
     }
-  };
+  }, [user._id]);
 
   const openChat = async (chatUser) => {
     try {
-      const res = await axios.get(
-        `${API_BASE_URL}/api/users/status/${chatUser._id}`
-      );
+      const res = await api.get(`/users/status/${chatUser._id}`);
 
       const updatedUser = {
         ...chatUser,
@@ -43,8 +37,7 @@ const Home = ({ user, setUser }) => {
       setSelected(updatedUser);
       setIsSidebarOpen(false);
       setNotifications((prev) => prev.filter((n) => n.from !== chatUser._id));
-    } catch (err) {
-      console.log("Error fetching status", err);
+    } catch {
       setSelected(chatUser);
       setIsSidebarOpen(false);
     }
@@ -59,12 +52,12 @@ const Home = ({ user, setUser }) => {
     }
 
     try {
-      const res = await axios.get(
-        `${API_BASE_URL}/api/users/search?query=${query}`
-      );
+      const res = await api.get("/users/search", {
+        params: { query },
+      });
       setSearchResults(res.data);
-    } catch (err) {
-      console.log("Search error:", err);
+    } catch {
+      setSearchResults([]);
     }
   };
 
@@ -91,7 +84,7 @@ const Home = ({ user, setUser }) => {
         setIsSidebarOpen(false);
       } else {
         try {
-          const listRes = await axios.get(`${API_BASE_URL}/api/users/chat-list/${user._id}`);
+          const listRes = await api.get(`/users/chat-list/${user._id}`);
           setUsers(listRes.data);
           const found = listRes.data.find((u) => u._id === data.from);
           if (found) {
@@ -100,7 +93,7 @@ const Home = ({ user, setUser }) => {
             setSelected({ _id: data.from, username: "Unknown Caller" });
           }
           setIsSidebarOpen(false);
-        } catch (err) {
+        } catch {
           setSelected({ _id: data.from, username: "Unknown Caller" });
           setIsSidebarOpen(false);
         }
@@ -109,13 +102,19 @@ const Home = ({ user, setUser }) => {
 
     socket.on("connect", handleConnect);
     socket.on("incoming-call", handleIncomingCall);
-    fetchUsers();
+
+    const loadUsers = async () => {
+      await fetchUsers();
+    };
+
+    void loadUsers();
 
     return () => {
       socket.off("connect", handleConnect);
       socket.off("incoming-call", handleIncomingCall);
+      socket.disconnect();
     };
-  }, [user._id]);
+  }, [fetchUsers, user._id]);
 
   useEffect(() => {
     const handleNewNotification = (data) => {
