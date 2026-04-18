@@ -12,6 +12,8 @@ import authRoute from "./routes/authRoute.js";
 import userRoute from "./routes/userRoute.js";
 import messageRoute from "./routes/messageRoute.js";
 import contactRoute from "./routes/contactRoute.js";
+import groupRoute from "./routes/groupRoute.js";
+import meetingRoute from "./routes/meetingRoute.js";
 import { notFound, errorHandler } from "./middlewares/errorMiddleware.js";
 import { applySecurityHeaders } from "./middlewares/securityMiddleware.js";
 
@@ -37,8 +39,26 @@ const isPrivateIpv4Host = (hostname) => {
   return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
 };
 
+/** Lets you run Vite on localhost while the API is on Render/Vercel without listing every dev URL in ALLOWED_ORIGINS. */
+const isLocalHttpLoopback = (origin) => {
+  try {
+    const url = new URL(origin);
+
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1")
+    );
+  } catch {
+    return false;
+  }
+};
+
 const isAllowedOrigin = (origin) => {
   if (!origin || allowedOrigins.has(origin)) {
+    return true;
+  }
+
+  if (isProduction && isLocalHttpLoopback(origin)) {
     return true;
   }
 
@@ -85,6 +105,8 @@ app.use("/api/auth", authRoute);
 app.use("/api/users", userRoute);
 app.use("/api/messages", messageRoute);
 app.use("/api/contacts", contactRoute);
+app.use("/api/groups", groupRoute);
+app.use("/api/meetings", meetingRoute);
 app.use(notFound);
 app.use(errorHandler);
 
@@ -99,7 +121,9 @@ const startServer = async () => {
 
   const io = new Server(server, {
     cors: {
-      origin: env.allowedOrigins,
+      origin: (origin, callback) => {
+        callback(null, isAllowedOrigin(origin));
+      },
       credentials: true,
     },
   });

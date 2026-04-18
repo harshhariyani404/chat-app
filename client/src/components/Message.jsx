@@ -159,8 +159,8 @@ const Message = ({ msg, myId }) => {
   const bubbleClasses = msg.isDeletedForEveryone
     ? "border border-slate-200 bg-slate-100/90 text-slate-500 shadow-sm"
     : isMe
-      ? "bg-[linear-gradient(135deg,#0ea5e9,#2563eb)] text-white shadow-[0_18px_40px_rgba(37,99,235,0.22)]"
-      : "border border-slate-200 bg-white text-slate-900 shadow-sm";
+      ? "bg-gradient-to-br from-indigo-600 to-violet-700 text-white shadow-[0_12px_36px_-8px_rgba(79,70,229,0.45)] ring-1 ring-white/10"
+      : "border border-slate-200/90 bg-white text-slate-900 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.08)]";
 
   return (
     <>

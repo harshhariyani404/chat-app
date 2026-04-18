@@ -3,11 +3,8 @@ client/node_modules/
 server/node_modules/
 client/dist/
 server/uploads/
-.env
-.env.*
-client/.env
-client/.env.*
-server/.env
-server/.env.*
+# Ignore only env files at repo root — keep client/ and server/.env in their folders
+/.env
+/.env.*
 !client/.env.example
 !server/.env.example

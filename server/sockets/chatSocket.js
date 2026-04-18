@@ -1,5 +1,6 @@
 import Message from "../models/message.js";
 import User from "../models/user.js";
+import { setupGroupMeetingListeners } from "./groupMeetingSocket.js";
 import { onlineUsers } from "./onlineUsers.js";
 
 const getNotificationText = (message, attachments = []) => {
@@ -189,6 +190,8 @@ const chatSocket = (io) => {
         io.to(targetSocket).emit("call-declined");
       }
     });
+
+    setupGroupMeetingListeners(socket, io);
   });
 };
 

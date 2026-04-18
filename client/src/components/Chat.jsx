@@ -817,7 +817,7 @@ const Chat = ({
   const selectedAvatarUrl = getAvatarUrl(selected?.avatar);
 
   return (
-    <section className="relative flex min-w-0 flex-1 flex-col bg-transparent">
+    <section className="relative flex min-w-0 flex-1 flex-col bg-transparent md:pr-1">
       {fullScreenPreview && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
@@ -858,12 +858,12 @@ const Chat = ({
       )}
 
       {callState !== "idle" && (
-        <div className={`absolute inset-0 z-[90] items-center justify-center bg-slate-950/78 p-2 sm:p-4 backdrop-blur-sm ${!isCallMinimized ? "flex" : "hidden"}`}>
-          <div className="relative flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.18),transparent_28%),linear-gradient(180deg,#0f172a_0%,#020617_100%)] text-white shadow-[0_32px_80px_rgba(2,6,23,0.55)]">
+        <div className={`absolute inset-0 z-[90] items-center justify-center bg-slate-950/85 p-2 sm:p-4 backdrop-blur-md ${!isCallMinimized ? "flex" : "hidden"}`}>
+          <div className="relative flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.25),transparent_45%),linear-gradient(180deg,#0f172a_0%,#020617_100%)] text-white shadow-[0_32px_80px_rgba(2,6,23,0.6)] ring-1 ring-indigo-500/20">
             <div className="flex items-start justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-5 sm:py-4">
               <div className="min-w-0">
-                <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-sky-300/80">
-                  {callType === "video" ? "Video Call" : "Audio Call"}
+                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.28em] text-indigo-300/90">
+                  {callType === "video" ? "Video call" : "Voice call"}
                 </p>
                 <h3 className="mt-1 sm:mt-2 truncate text-xl sm:text-2xl font-semibold">
                   {activeCallName}
@@ -880,7 +880,7 @@ const Chat = ({
               <button
                 type="button"
                 onClick={() => setIsCallMinimized(true)}
-                className="inline-flex min-h-[36px] sm:min-h-[44px] items-center justify-center rounded-xl sm:rounded-2xl border border-white/10 bg-white/5 px-3 sm:px-4 text-xs sm:text-sm font-medium text-slate-200 transition hover:bg-white/10"
+                className="inline-flex min-h-[36px] sm:min-h-[44px] items-center justify-center rounded-xl sm:rounded-2xl border border-white/15 bg-white/10 px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white transition hover:bg-white/15"
               >
                 Minimize
               </button>
@@ -1008,7 +1008,7 @@ const Chat = ({
         <div className="absolute top-24 right-4 sm:right-6 z-[80]">
           <button
             onClick={() => setIsCallMinimized(false)}
-            className="group flex items-center gap-2.5 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-500/20 transition-all hover:bg-emerald-600 hover:shadow-emerald-500/30"
+            className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-900/30 transition hover:from-emerald-400 hover:to-teal-500"
           >
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
@@ -1019,8 +1019,8 @@ const Chat = ({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-white/60 bg-white/72 shadow-[0_24px_80px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-        <div className="border-b border-slate-200/80 bg-white/70 px-6 py-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200/80 bg-white/95 shadow-panel backdrop-blur-xl md:mx-4 md:mt-4 md:rounded-3xl">
+        <div className="relative border-b border-slate-200/80 bg-gradient-to-r from-white to-slate-50/90 px-5 py-4 md:rounded-t-3xl">
           <div className="flex items-start gap-4">
             <img
               src={
@@ -1035,11 +1035,11 @@ const Chat = ({
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="truncate text-lg font-semibold text-slate-900">
+                  <h2 className="truncate text-lg font-bold tracking-tight text-slate-900">
                     {selected.displayName || selected.username}
                   </h2>
 
-                  <p className={`mt-0.5 text-sm ${selected.isOnline ? "text-emerald-600" : "text-slate-500"}`}>
+                  <p className={`mt-0.5 text-sm font-medium ${selected.isOnline ? "text-emerald-600" : "text-slate-500"}`}>
                     {selected.isOnline ? "Online now" : `Last seen ${formatTime(selected.lastSeen)}`}
                   </p>
                 </div>
@@ -1048,7 +1048,7 @@ const Chat = ({
                   <button
                     type="button"
                     onClick={() => startCall("audio")}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
                     aria-label="Start audio call"
                     title="Audio call"
                   >
@@ -1060,7 +1060,7 @@ const Chat = ({
                   <button
                     type="button"
                     onClick={() => startCall("video")}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
                     aria-label="Start video call"
                     title="Video call"
                   >
@@ -1072,8 +1072,8 @@ const Chat = ({
               </div>
 
               {callState !== "idle" && (
-                <p className="mt-2 text-xs font-medium uppercase tracking-[0.2em] text-sky-600">
-                  {callType} call {callState}
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600">
+                  {callType} · {callState}
                 </p>
               )}
             </div>
@@ -1142,13 +1142,14 @@ const Chat = ({
           </div>
         </div>
 
-        <div ref={chatRef} className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.85),rgba(255,255,255,0.96))] px-5 py-5">
+        <div ref={chatRef} className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.5),rgba(255,255,255,0.98))] px-4 py-5 sm:px-6">
           {messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/80 px-8 py-10 text-center shadow-sm">
-                <p className="text-base font-medium text-slate-600">No messages yet</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  Send a text or any file type to start the conversation.
+            <div className="flex h-full min-h-[200px] items-center justify-center">
+              <div className="max-w-sm rounded-3xl border border-dashed border-slate-200/90 bg-white/90 px-8 py-10 text-center shadow-soft">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-2xl">💬</div>
+                <p className="text-base font-bold text-slate-800">No messages yet</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                  Say hello, or attach images, video, or documents below.
                 </p>
               </div>
             </div>
@@ -1176,7 +1177,7 @@ const Chat = ({
           )}
         </div>
 
-        <div className="border-t border-slate-200/80 bg-white/80 px-3 py-3 sm:px-5 sm:py-4">
+        <div className="border-t border-slate-200/80 bg-white/95 px-3 py-3 backdrop-blur-sm sm:px-5 sm:py-4 md:rounded-b-3xl">
           {!!selectedFiles.length && (
             <div className="mb-3 rounded-3xl border border-sky-100 bg-sky-50/80 p-3">
               <p className="mb-3 text-sm font-semibold text-sky-900">
@@ -1252,7 +1253,7 @@ const Chat = ({
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-[28px] border border-slate-200 bg-slate-50/90 px-2 py-2 shadow-inner sm:items-center sm:gap-3 sm:px-3 sm:py-3">
+          <div className="flex items-end gap-2 rounded-[28px] border border-slate-200/90 bg-slate-50/90 px-2 py-2 shadow-inner ring-1 ring-slate-100/80 sm:items-center sm:gap-3 sm:px-3 sm:py-3">
             <div className="relative flex shrink-0 items-center gap-2" ref={fileMenuRef}>
               <button
                 type="button"
@@ -1312,7 +1313,7 @@ const Chat = ({
 
             <textarea
               ref={inputRef}
-              className="min-h-[52px] max-h-32 min-w-0 flex-1 resize-none rounded-2xl border border-white bg-white px-4 py-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-sky-200 sm:min-h-[44px] sm:h-11"
+              className="min-h-[52px] max-h-32 min-w-0 flex-1 resize-none rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20 sm:min-h-[44px] sm:h-11"
               value={text}
               rows="1"
               placeholder="Write a message..."
@@ -1326,7 +1327,7 @@ const Chat = ({
             />
 
             <button
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-lg shadow-sky-500/20 transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5 sm:text-sm sm:font-semibold"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5 sm:text-sm sm:font-semibold"
               onClick={handleComposerSubmit}
               disabled={(!text.trim() && selectedFiles.length === 0) || isUploadingFiles}
               aria-label={isUploadingFiles ? "Sending" : "Send message"}

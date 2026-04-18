@@ -6,28 +6,25 @@ Production-ready full-stack chat application with a React + Vite frontend and an
 
 ```text
 chat-app/
-|-- client/
+|-- client/          # Frontend — own package.json, node_modules, lockfile
 |   |-- src/
 |   |-- .env
 |   |-- .env.example
 |   `-- package.json
-|-- server/
+|-- server/          # Backend — own package.json, node_modules, lockfile
 |   |-- config/
 |   |-- controllers/
-|   |-- middlewares/
-|   |-- models/
-|   |-- routes/
-|   |-- sockets/
-|   |-- utils/
+|   |-- ...
 |   |-- .env
 |   |-- .env.example
 |   `-- package.json
 |-- .gitignore
-|-- package.json
 `-- README.md
 ```
 
 ## Environment variables
+
+Use real files at **`client/.env`** and **`server/.env`** (they stay in those folders; only a root-level `.env` is git-ignored). For new setups, copy from each folder’s `.env.example`.
 
 Frontend in `client/.env`:
 
@@ -54,26 +51,23 @@ UPLOAD_MAX_FILE_SIZE_MB=25
 
 ## Local development
 
-1. Run `npm install` from the repo root.
-2. Copy `client/.env.example` to `client/.env` if needed.
-3. Copy `server/.env.example` to `server/.env` and fill in real secrets.
-4. Start the backend with `npm run dev:server`.
-5. Start the frontend with `npm run dev:client`.
+1. **API:** `cd server` → `npm install` → copy `server/.env.example` to `server/.env` → `npm run dev`
+2. **UI:** `cd client` → `npm install` → copy `client/.env.example` to `client/.env` → `npm run dev`
 
-## Production commands
+There is no root `package.json`; install and run inside each folder.
 
-- `npm run build`
-- `npm start`
+## Production / deploy (separate hosts)
 
-`npm start` runs the Express backend. For frontend hosting on Vercel or Netlify, deploy the `client/` directory separately using:
+**Frontend (e.g. Vercel)** — set project root to `client/`:
 
-- Build command: `npm run build`
-- Publish directory: `dist`
+- Install: `npm install`
+- Build: `npm run build`
+- Output: `dist/`
 
-For Render backend deployment, deploy the `server/` directory or the repo root with:
+**Backend (e.g. Render)** — set project root to `server/`:
 
-- Build command: `npm install && npm run build`
-- Start command: `npm start`
+- Build: `npm install` (or `npm ci`)
+- Start: `npm start`
 
 ## Production improvements included
 
