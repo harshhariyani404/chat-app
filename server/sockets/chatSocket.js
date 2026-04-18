@@ -21,16 +21,21 @@ const chatSocket = (io) => {
       try {
         if (!userId) return;
 
+        const idStr = String(userId);
+        const isGuest = idStr.startsWith("guest_");
+
         socket.userId = userId;
         onlineUsers[userId] = socket.id;
         socket.join(`user:${userId}`);
 
-        await User.findByIdAndUpdate(userId, {
-          isOnline: true,
-          lastSeen: null,
-        });
+        if (!isGuest) {
+          await User.findByIdAndUpdate(userId, {
+            isOnline: true,
+            lastSeen: null,
+          });
 
-        socket.broadcast.emit("user_online", userId);
+          socket.broadcast.emit("user_online", userId);
+        }
       } catch {
         delete onlineUsers[userId];
       }

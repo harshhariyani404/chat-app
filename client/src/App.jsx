@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
-import MeetingRoom from "./pages/MeetingRoom";
+import MeetingEnter from "./pages/MeetingEnter";
 import Signup from "./pages/Signup";
 import { Toaster } from "react-hot-toast";
 import { getStoredUser } from "./lib/storage";
@@ -42,20 +42,23 @@ const App = () => {
         }}
       />
 
-      {!user ? (
-        showSignup ? (
-          <Signup setUser={setUser} setShowSignup={setShowSignup} />
-        ) : (
-          <Login setUser={setUser} setShowSignup={setShowSignup} />
-        )
-      ) : (
-        <BrowserRouter>
-          <Routes>
-            <Route path="/meeting/:meetingId" element={<MeetingRoom user={user} />} />
-            <Route path="/*" element={<Home user={user} setUser={setUser} />} />
-          </Routes>
-        </BrowserRouter>
-      )}
+      <BrowserRouter>
+        <Routes>
+          <Route path="/meeting/:meetingId" element={<MeetingEnter />} />
+          <Route
+            path="/*"
+            element={
+              user ? (
+                <Home user={user} setUser={setUser} />
+              ) : showSignup ? (
+                <Signup setUser={setUser} setShowSignup={setShowSignup} />
+              ) : (
+                <Login setUser={setUser} setShowSignup={setShowSignup} />
+              )
+            }
+          />
+        </Routes>
+      </BrowserRouter>
     </>
   );
 };

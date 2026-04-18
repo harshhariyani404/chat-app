@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { api } from "../lib/api";
 import { getAvatarUrl } from "../lib/avatar";
@@ -7,10 +7,36 @@ const GroupSettingsDrawer = ({ group, user, onClose, onGroupUpdated, onGroupDele
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  const [profileName, setProfileName] = useState(group.name || "");
+  const [profileDescription, setProfileDescription] = useState(group.description || "");
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [clearAvatar, setClearAvatar] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const avatarInputRef = useRef(null);
 
   const adminId = group.admin?._id || group.admin;
   const isAdmin = String(adminId) === String(user._id);
   const members = group.members || [];
+
+  useEffect(() => {
+    setProfileName(group.name || "");
+    setProfileDescription(group.description || "");
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setClearAvatar(false);
+  }, [group._id, group.name, group.description]);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview(null);
+      return undefined;
+    }
+
+    const url = URL.createObjectURL(avatarFile);
+    setAvatarPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [avatarFile]);
 
   const handleSearch = async (q) => {
     setSearch(q);
@@ -24,6 +50,43 @@ const GroupSettingsDrawer = ({ group, user, onClose, onGroupUpdated, onGroupDele
       setResults(res.data.filter((u) => u._id !== user._id && !memberIds.has(String(u._id))));
     } catch {
       setResults([]);
+    }
+  };
+
+  const saveGroupProfile = async () => {
+    if (!isAdmin) return;
+    const name = profileName.trim();
+    if (!name) {
+      toast.error("Group name is required");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      if (avatarFile) {
+        const fd = new FormData();
+        fd.append("name", name);
+        fd.append("description", profileDescription.trim().slice(0, 500));
+        fd.append("avatar", avatarFile);
+        const res = await api.patch(`/groups/${group._id}`, fd);
+        onGroupUpdated(res.data);
+        setAvatarFile(null);
+        setClearAvatar(false);
+        toast.success("Group profile updated");
+      } else {
+        const res = await api.patch(`/groups/${group._id}`, {
+          name,
+          description: profileDescription.trim().slice(0, 500),
+          ...(clearAvatar ? { clearAvatar: true } : {}),
+        });
+        onGroupUpdated(res.data);
+        setClearAvatar(false);
+        toast.success("Group profile updated");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Could not save profile");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -66,16 +129,37 @@ const GroupSettingsDrawer = ({ group, user, onClose, onGroupUpdated, onGroupDele
     }
   };
 
+  const groupAvatarDisplay =
+    !clearAvatar && (avatarPreview || getAvatarUrl(group.avatar))
+      ? avatarPreview || getAvatarUrl(group.avatar)
+      : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(group.name || "G")}`;
+
+  const readOnlyGroupAvatar =
+    getAvatarUrl(group.avatar) ||
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(group.name || "G")}`;
+
   if (!isAdmin) {
     return (
       <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center">
         <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-panel">
           <h3 className="text-lg font-bold text-slate-900">Group info</h3>
-          <p className="mt-1 text-sm text-slate-500">{group.name}</p>
-          <p className="mt-4 text-sm text-slate-600">
-            <span className="font-semibold text-slate-800">{members.length}</span> members — only the admin can change
-            members.
-          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <img
+              src={readOnlyGroupAvatar}
+              alt=""
+              className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-slate-200"
+            />
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900">{group.name}</p>
+              <p className="text-sm text-slate-500">
+                <span className="font-semibold text-slate-800">{members.length}</span> members — only the admin can edit
+                the group.
+              </p>
+            </div>
+          </div>
+          {group.description ? (
+            <p className="mt-4 text-sm leading-relaxed text-slate-600">{group.description}</p>
+          ) : null}
           <ul className="mt-4 max-h-48 space-y-2 overflow-y-auto">
             {members.map((m) => (
               <li key={m._id || m} className="flex items-center gap-2 text-sm text-slate-700">
@@ -112,7 +196,7 @@ const GroupSettingsDrawer = ({ group, user, onClose, onGroupUpdated, onGroupDele
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
             <h3 className="text-lg font-bold tracking-tight text-slate-900">Group settings</h3>
-            <p className="text-sm text-slate-500">{group.name}</p>
+            <p className="text-sm text-slate-500">Profile & members</p>
           </div>
           <button
             type="button"
@@ -126,16 +210,90 @@ const GroupSettingsDrawer = ({ group, user, onClose, onGroupUpdated, onGroupDele
           </button>
         </div>
 
-        <div className="border-b border-slate-100 px-5 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Members</p>
-          <p className="text-2xl font-bold text-slate-900">
-            {members.length}
-            <span className="ml-1 text-base font-normal text-slate-500">people</span>
-          </p>
-        </div>
-
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Add people</label>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Group profile</p>
+          <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex flex-col items-center gap-2">
+              <img
+                src={groupAvatarDisplay}
+                alt=""
+                className="h-24 w-24 rounded-2xl object-cover ring-2 ring-slate-100"
+              />
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  setAvatarFile(f || null);
+                  setClearAvatar(false);
+                }}
+              />
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Change photo
+                </button>
+                {(getAvatarUrl(group.avatar) || avatarFile) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAvatarFile(null);
+                      setClearAvatar(true);
+                    }}
+                    className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Group name</label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  maxLength={120}
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/15"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Description (optional)</label>
+                <textarea
+                  value={profileDescription}
+                  onChange={(e) => setProfileDescription(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="What is this group about?"
+                  className="mt-1 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/15"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={savingProfile}
+                onClick={() => void saveGroupProfile()}
+                className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-2.5 text-sm font-semibold text-white shadow-md transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-60"
+              >
+                {savingProfile ? "Saving…" : "Save profile"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Members</p>
+            <p className="text-2xl font-bold text-slate-900">
+              {members.length}
+              <span className="ml-1 text-base font-normal text-slate-500">people</span>
+            </p>
+          </div>
+
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-500">Add people</label>
           <input
             type="search"
             value={search}

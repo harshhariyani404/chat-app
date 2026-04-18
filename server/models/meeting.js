@@ -14,6 +14,12 @@ const meetingSchema = new mongoose.Schema(
       required: true,
     },
     participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    guestParticipants: [
+      {
+        guestId: { type: String, required: true },
+        displayName: { type: String, required: true },
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,

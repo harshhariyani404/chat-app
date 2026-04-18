@@ -5,57 +5,53 @@ import { iceServers } from "../lib/webrtcConfig";
 const pcConfig = { iceServers };
 
 /**
- * Star topology: each guest has one RTCPeerConnection to the host.
- * The host has one RTCPeerConnection per guest.
+ * Full mesh WebRTC: each participant has one RTCPeerConnection per other participant.
+ * Signaling (offer / answer / ICE) is relayed through the socket server.
+ *
+ * Pairing uses a fixed ordering (string compare on ids): the lexicographically
+ * smaller id sends the offer so offers never collide.
  */
-export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
+export function useStarMeeting({ meetingId, userId, peerIds = [], hostId, enabled }) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [error, setError] = useState("");
 
   const localStreamRef = useRef(null);
-  const hostIdRef = useRef(hostId);
-  const userIdRef = useRef(userId);
   const meetingIdRef = useRef(meetingId);
-
-  const guestPcRef = useRef(null);
-  const hostPeersRef = useRef({});
-  const pendingIceGuestRef = useRef([]);
-  const pendingIceHostRef = useRef({});
+  const userIdRef = useRef(userId);
+  const peerIdsRef = useRef(peerIds);
+  const peersRef = useRef({});
+  const pendingIceRef = useRef({});
   const pendingOffersRef = useRef([]);
 
   useEffect(() => {
-    hostIdRef.current = hostId;
-    userIdRef.current = userId;
     meetingIdRef.current = meetingId;
-  }, [hostId, userId, meetingId]);
+    userIdRef.current = userId;
+    peerIdsRef.current = peerIds;
+  }, [meetingId, userId, peerIds]);
 
-  const isHost = Boolean(hostId && userId && hostId === userId);
+  const isHost = Boolean(hostId && userId && String(hostId) === String(userId));
 
   const upsertRemote = useCallback((peerUserId, stream) => {
     if (!stream) return;
-    setRemoteStreams((prev) => ({ ...prev, [peerUserId]: stream }));
+    const key = String(peerUserId);
+    setRemoteStreams((prev) => ({ ...prev, [key]: stream }));
   }, []);
 
   const removeRemote = useCallback((peerUserId) => {
+    const key = String(peerUserId);
     setRemoteStreams((prev) => {
       const next = { ...prev };
-      delete next[peerUserId];
+      delete next[key];
       return next;
     });
   }, []);
 
-  const flushPendingIce = async (pc, bucket) => {
-    const key = bucket === "guest" ? "guest" : bucket;
-    const q =
-      key === "guest"
-        ? [...pendingIceGuestRef.current]
-        : [...(pendingIceHostRef.current[key] || [])];
-    if (key === "guest") {
-      pendingIceGuestRef.current = [];
-    } else {
-      pendingIceHostRef.current[key] = [];
-    }
+  const flushPendingIceForPeer = useCallback(async (peerKey) => {
+    const pc = peersRef.current[peerKey];
+    if (!pc) return;
+    const q = [...(pendingIceRef.current[peerKey] || [])];
+    pendingIceRef.current[peerKey] = [];
     for (const c of q) {
       try {
         await pc.addIceCandidate(new RTCIceCandidate(c));
@@ -63,62 +59,73 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
         /* ignore */
       }
     }
-  };
+  }, []);
 
-  const createHostPeerForGuest = useCallback(
-    (guestUserId, stream) => {
-      if (hostPeersRef.current[guestUserId]) {
-        return hostPeersRef.current[guestUserId];
-      }
-
-      const pc = new RTCPeerConnection(pcConfig);
-
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-      });
-
+  const attachPeerHandlers = useCallback(
+    (pc, remotePeerKey) => {
       pc.ontrack = (ev) => {
         const [s] = ev.streams;
-        if (s) {
-          upsertRemote(guestUserId, s);
-        }
+        if (s) upsertRemote(remotePeerKey, s);
       };
-
       pc.onicecandidate = (ev) => {
         if (ev.candidate) {
           socket.emit("meeting-ice-candidate", {
             meetingId: meetingIdRef.current,
-            to: guestUserId,
+            to: remotePeerKey,
             candidate: ev.candidate.toJSON(),
           });
         }
       };
-
-      hostPeersRef.current[guestUserId] = pc;
-      return pc;
     },
     [upsertRemote]
   );
 
-  const processHostOffer = useCallback(
+  const closePeer = useCallback(
+    (peerKey) => {
+      const pc = peersRef.current[peerKey];
+      if (pc) {
+        pc.close();
+      }
+      delete peersRef.current[peerKey];
+      delete pendingIceRef.current[peerKey];
+      removeRemote(peerKey);
+    },
+    [removeRemote]
+  );
+
+  const processAnswererOffer = useCallback(
     async (from, sdp) => {
       const stream = localStreamRef.current;
+      const fromKey = String(from);
+      const myId = String(userIdRef.current);
+
       if (!stream) {
-        pendingOffersRef.current.push({ from, sdp });
+        pendingOffersRef.current.push({ from: fromKey, sdp });
+        return;
+      }
+
+      if (myId < fromKey) {
         return;
       }
 
       try {
-        const pc = createHostPeerForGuest(from, stream);
+        let pc = peersRef.current[fromKey];
+        if (!pc) {
+          pc = new RTCPeerConnection(pcConfig);
+          peersRef.current[fromKey] = pc;
+          attachPeerHandlers(pc, fromKey);
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-        await flushPendingIce(pc, from);
+        await flushPendingIceForPeer(fromKey);
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         socket.emit("meeting-answer", {
           meetingId: meetingIdRef.current,
-          to: from,
+          to: fromKey,
           sdp: {
             type: pc.localDescription.type,
             sdp: pc.localDescription.sdp,
@@ -128,34 +135,62 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
         setError("Failed to connect a participant");
       }
     },
-    [createHostPeerForGuest]
+    [attachPeerHandlers, flushPendingIceForPeer]
   );
 
-  const cleanupGuest = useCallback(() => {
-    const pc = guestPcRef.current;
-    guestPcRef.current = null;
-    if (pc) {
-      pc.getSenders().forEach((s) => s.track?.stop());
-      pc.close();
-    }
-    pendingIceGuestRef.current = [];
-  }, []);
+  const createAndOfferTo = useCallback(
+    async (peerKey, stream) => {
+      if (peersRef.current[peerKey]) return;
 
-  const cleanupHostPeers = useCallback(() => {
-    Object.keys(hostPeersRef.current).forEach((k) => {
-      const pc = hostPeersRef.current[k];
-      if (pc) {
-        pc.getSenders().forEach((s) => s.track?.stop());
-        pc.close();
+      try {
+        const pc = new RTCPeerConnection(pcConfig);
+        peersRef.current[peerKey] = pc;
+        attachPeerHandlers(pc, peerKey);
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket.emit("meeting-offer", {
+          meetingId: meetingIdRef.current,
+          to: peerKey,
+          sdp: {
+            type: pc.localDescription.type,
+            sdp: pc.localDescription.sdp,
+          },
+        });
+      } catch {
+        closePeer(peerKey);
+        setError("Failed to connect a participant");
       }
-      removeRemote(k);
-    });
-    hostPeersRef.current = {};
-    pendingIceHostRef.current = {};
-  }, [removeRemote]);
+    },
+    [attachPeerHandlers, closePeer]
+  );
+
+  const syncMeshPeers = useCallback(
+    async (stream) => {
+      if (!stream) return;
+
+      const current = new Set((peerIdsRef.current || []).map(String));
+      const myId = String(userIdRef.current);
+
+      for (const id of Object.keys(peersRef.current)) {
+        if (!current.has(id)) {
+          closePeer(id);
+        }
+      }
+
+      for (const peerId of current) {
+        if (myId < peerId && !peersRef.current[peerId]) {
+          await createAndOfferTo(peerId, stream);
+        }
+      }
+    },
+    [closePeer, createAndOfferTo]
+  );
 
   useEffect(() => {
-    if (!enabled || !meetingId || !hostId || !userId) {
+    if (!enabled || !meetingId || !userId) {
       return undefined;
     }
 
@@ -174,51 +209,14 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
         }
 
         localStreamRef.current = stream;
-
-        if (isHost) {
-          const pending = pendingOffersRef.current.splice(0);
-          for (const { from, sdp } of pending) {
-            await processHostOffer(from, sdp);
-          }
-        }
-
         setLocalStream(stream);
 
-        if (!isHost) {
-          const pc = new RTCPeerConnection(pcConfig);
-          guestPcRef.current = pc;
-
-          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-          pc.ontrack = (ev) => {
-            const [s] = ev.streams;
-            if (s && hostIdRef.current) {
-              upsertRemote(hostIdRef.current, s);
-            }
-          };
-
-          pc.onicecandidate = (ev) => {
-            if (ev.candidate && hostIdRef.current) {
-              socket.emit("meeting-ice-candidate", {
-                meetingId: meetingIdRef.current,
-                to: hostIdRef.current,
-                candidate: ev.candidate.toJSON(),
-              });
-            }
-          };
-
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-
-          socket.emit("meeting-offer", {
-            meetingId: meetingIdRef.current,
-            to: hostIdRef.current,
-            sdp: {
-              type: pc.localDescription.type,
-              sdp: pc.localDescription.sdp,
-            },
-          });
+        const pending = pendingOffersRef.current.splice(0);
+        for (const { from, sdp } of pending) {
+          await processAnswererOffer(from, sdp);
         }
+
+        await syncMeshPeers(stream);
       } catch (e) {
         setError(e?.message || "Could not access camera or microphone");
       }
@@ -229,7 +227,14 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, meetingId, hostId, userId, isHost, upsertRemote, processHostOffer]);
+  }, [enabled, meetingId, userId, processAnswererOffer, syncMeshPeers]);
+
+  useEffect(() => {
+    if (!enabled || !localStreamRef.current) {
+      return undefined;
+    }
+    void syncMeshPeers(localStreamRef.current);
+  }, [peerIds, enabled, syncMeshPeers]);
 
   useEffect(() => {
     if (!enabled || !meetingId) {
@@ -237,30 +242,29 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
     }
 
     const onOffer = async ({ from, sdp, meetingId: mid }) => {
-      if (mid !== meetingIdRef.current || from === userIdRef.current) {
+      if (mid !== meetingIdRef.current) {
         return;
       }
-
-      if (userIdRef.current !== hostIdRef.current) {
+      const fromKey = String(from);
+      if (fromKey === String(userIdRef.current)) {
         return;
       }
-
-      await processHostOffer(from, sdp);
+      await processAnswererOffer(fromKey, sdp);
     };
 
     const onAnswer = async ({ from, sdp, meetingId: mid }) => {
-      if (mid !== meetingIdRef.current || from !== hostIdRef.current) {
+      if (mid !== meetingIdRef.current) {
         return;
       }
-
-      const pc = guestPcRef.current;
+      const fromKey = String(from);
+      const pc = peersRef.current[fromKey];
       if (!pc) {
         return;
       }
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-        await flushPendingIce(pc, "guest");
+        await flushPendingIceForPeer(fromKey);
       } catch {
         setError("Failed to finalize connection");
       }
@@ -270,35 +274,17 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
       if (mid !== meetingIdRef.current || !candidate) {
         return;
       }
-
-      const hosting = userIdRef.current === hostIdRef.current;
-
-      if (hosting && from && from !== userIdRef.current) {
-        const pc = hostPeersRef.current[from];
-        if (pc?.remoteDescription?.type) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch {
-            /* */
-          }
-        } else {
-          pendingIceHostRef.current[from] = pendingIceHostRef.current[from] || [];
-          pendingIceHostRef.current[from].push(candidate);
+      const fromKey = String(from);
+      const pc = peersRef.current[fromKey];
+      if (pc?.remoteDescription?.type) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch {
+          /* */
         }
-        return;
-      }
-
-      if (!hosting && from === hostIdRef.current) {
-        const pc = guestPcRef.current;
-        if (pc?.remoteDescription?.type) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch {
-            /* */
-          }
-        } else {
-          pendingIceGuestRef.current.push(candidate);
-        }
+      } else {
+        pendingIceRef.current[fromKey] = pendingIceRef.current[fromKey] || [];
+        pendingIceRef.current[fromKey].push(candidate);
       }
     };
 
@@ -311,30 +297,19 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
       socket.off("meeting-answer", onAnswer);
       socket.off("meeting-ice-candidate", onIce);
     };
-  }, [enabled, meetingId, processHostOffer]);
+  }, [enabled, meetingId, processAnswererOffer, flushPendingIceForPeer]);
 
   useEffect(() => {
     return () => {
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
 
-      const g = guestPcRef.current;
-      guestPcRef.current = null;
-      if (g) {
-        g.getSenders().forEach((s) => s.track?.stop());
-        g.close();
-      }
-
-      Object.keys(hostPeersRef.current).forEach((k) => {
-        const pc = hostPeersRef.current[k];
-        if (pc) {
-          pc.getSenders().forEach((s) => s.track?.stop());
-          pc.close();
-        }
+      Object.keys(peersRef.current).forEach((k) => {
+        peersRef.current[k]?.close();
       });
-      hostPeersRef.current = {};
-      pendingIceGuestRef.current = [];
-      pendingIceHostRef.current = {};
+      peersRef.current = {};
+      pendingIceRef.current = {};
+      pendingOffersRef.current = [];
     };
   }, []);
 
@@ -359,7 +334,5 @@ export function useStarMeeting({ meetingId, userId, hostId, enabled }) {
     isHost,
     toggleAudio,
     toggleVideo,
-    cleanupGuest,
-    cleanupHostPeers,
   };
 }

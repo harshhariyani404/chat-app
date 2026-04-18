@@ -8,6 +8,16 @@ const groupSchema = new mongoose.Schema(
       trim: true,
       maxlength: 120,
     },
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500,
+    },
+    avatar: {
+      url: { type: String, default: "" },
+      publicId: { type: String, default: "" },
+    },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     admin: {
       type: mongoose.Schema.Types.ObjectId,

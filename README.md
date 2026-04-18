@@ -63,6 +63,7 @@ There is no root `package.json`; install and run inside each folder.
 - Install: `npm install`
 - Build: `npm run build`
 - Output: `dist/`
+- The repo includes `client/vercel.json` so routes like `/meeting/<id>` rewrite to `index.html` (SPA fallback). Commit that file with the client.
 
 **Backend (e.g. Render)** — set project root to `server/`:
 

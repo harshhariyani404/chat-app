@@ -32,12 +32,15 @@ export const broadcastMeetingUsers = async (io, meetingId) => {
     return;
   }
 
+  const guestCount = meeting.guestParticipants?.length ?? 0;
+  const userCount = meeting.participants?.length ?? 0;
+
   io.to(`meeting:${meetingId}`).emit("meeting-users-update", {
     meetingId,
     hostId: meeting.hostId._id.toString(),
     participants: meeting.participants,
     maxParticipants: MAX_MEETING_PARTICIPANTS,
-    participantCount: meeting.participants.length,
+    participantCount: userCount + guestCount,
   });
 };
 
@@ -130,6 +133,7 @@ export const setupGroupMeetingListeners = (socket, io) => {
         meetingId,
         hostId: uid,
         participants: [uid],
+        guestParticipants: [],
         isActive: true,
       });
 
@@ -141,8 +145,8 @@ export const setupGroupMeetingListeners = (socket, io) => {
     }
   });
 
-  socket.on("join-meeting", async ({ meetingId, userId } = {}) => {
-    const uid = socket.userId || userId;
+  socket.on("join-meeting", async ({ meetingId, userId, guestId, isGuest } = {}) => {
+    const uid = isGuest ? guestId : socket.userId || userId;
 
     if (!uid || !meetingId) {
       return;
@@ -156,10 +160,30 @@ export const setupGroupMeetingListeners = (socket, io) => {
         return;
       }
 
+      if (!Array.isArray(meeting.guestParticipants)) {
+        meeting.guestParticipants = [];
+      }
+
+      if (isGuest || String(uid).startsWith("guest_")) {
+        const gid = String(guestId || uid);
+        const found = meeting.guestParticipants.find((g) => g.guestId === gid);
+        if (!found) {
+          socket.emit("meeting-error", {
+            message: "Use the join screen to enter this meeting as a guest.",
+          });
+          return;
+        }
+
+        socket.join(`meeting:${meetingId}`);
+        await broadcastMeetingUsers(io, meetingId);
+        return;
+      }
+
       const idStr = String(uid);
+      const total = meeting.participants.length + meeting.guestParticipants.length;
 
       if (!meeting.participants.map((p) => p.toString()).includes(idStr)) {
-        if (meeting.participants.length >= MAX_MEETING_PARTICIPANTS) {
+        if (total >= MAX_MEETING_PARTICIPANTS) {
           socket.emit("meeting-error", {
             message: `This room is full (maximum ${MAX_MEETING_PARTICIPANTS} participants including the host).`,
             code: "MEETING_FULL",
@@ -178,8 +202,8 @@ export const setupGroupMeetingListeners = (socket, io) => {
     }
   });
 
-  socket.on("leave-meeting", async ({ meetingId, userId } = {}) => {
-    const uid = socket.userId || userId;
+  socket.on("leave-meeting", async ({ meetingId, userId, guestId, isGuest } = {}) => {
+    const uid = isGuest ? guestId : socket.userId || userId;
 
     if (!uid || !meetingId) {
       return;
@@ -192,13 +216,22 @@ export const setupGroupMeetingListeners = (socket, io) => {
         return;
       }
 
-      meeting.participants = meeting.participants.filter((p) => p.toString() !== String(uid));
+      const idStr = String(uid);
+      const isGuestLeave = Boolean(isGuest) || idStr.startsWith("guest_");
 
-      const isHost = meeting.hostId.toString() === String(uid);
+      if (isGuestLeave) {
+        const gid = String(guestId || uid);
+        meeting.guestParticipants = (meeting.guestParticipants || []).filter((g) => g.guestId !== gid);
+      } else {
+        meeting.participants = meeting.participants.filter((p) => p.toString() !== idStr);
+      }
+
+      const isHost = meeting.hostId.toString() === idStr;
 
       if (isHost || meeting.participants.length === 0) {
         meeting.isActive = false;
         meeting.participants = [];
+        meeting.guestParticipants = [];
       }
 
       await meeting.save();

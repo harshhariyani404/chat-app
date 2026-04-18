@@ -211,12 +211,20 @@ const Sidebar = ({
                   key={g._id}
                   type="button"
                   onClick={() => onSelectGroup(g)}
-                  className={`mb-2 flex min-h-[64px] w-full items-center rounded-2xl border px-3 py-3 text-left transition ${
+                  className={`mb-2 flex min-h-[64px] w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                     isActive
                       ? "border-violet-300 bg-violet-50 shadow-md ring-1 ring-violet-100"
                       : "border-transparent bg-white hover:border-violet-100 hover:bg-violet-50/50"
                   }`}
                 >
+                  <img
+                    src={
+                      getAvatarUrl(g.avatar) ||
+                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(g.name || "G")}`
+                    }
+                    alt=""
+                    className="h-11 w-11 shrink-0 rounded-xl object-cover ring-1 ring-slate-200/80"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-slate-900">{g.name}</div>
                     <div className="text-xs text-slate-500">{g.members?.length || 0} members</div>
